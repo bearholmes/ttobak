@@ -1,0 +1,17 @@
+# Dependencies & build outputs
+node_modules/
+dist/
+target/
+
+# Local models & runtime artifacts
+models/
+*.bin
+*.gguf
+*.mlmodelc/
+*.wav
+
+# macOS & IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp

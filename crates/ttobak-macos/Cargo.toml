@@ -1,0 +1,18 @@
+[package]
+name = "ttobak-macos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ttobak-core = { path = "../ttobak-core" }
+anyhow.workspace = true
+serde.workspace = true
+tracing.workspace = true
+parking_lot.workspace = true
+dirs.workspace = true
+core-foundation = "0.10.1"
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-app-kit = "0.3.2"
+block2 = "0.6"
