@@ -27,13 +27,14 @@ export const HudOverlay: React.FC<Props> = ({ snapshot }) => {
     const level = Math.max(0.08, Math.min(1, phase.rms_level));
     return (
       <div className="hud-stage">
-        <div className="hud-capsule">
+        <div className="hud-capsule recording">
+          <span className="status-dot live" aria-hidden="true" />
           <span className="hud-timer-only">
             {formatDuration(phase.elapsed_secs)}
           </span>
           <div className="hud-waveform" aria-hidden="true">
             {BAR_WEIGHTS.map((w, idx) => {
-              const h = Math.round(5 + level * w * 18);
+              const h = Math.round(4 + level * w * 14);
               return (
                 <span
                   key={idx}
@@ -56,6 +57,8 @@ export const HudOverlay: React.FC<Props> = ({ snapshot }) => {
           role="progressbar"
           aria-label="음성 변환 중"
         >
+          <span className="status-dot busy" aria-hidden="true" />
+          <span className="hud-status-label">변환 중</span>
           <div className="hud-progress-track">
             <div className="hud-progress-indeterminate" />
           </div>
@@ -67,8 +70,8 @@ export const HudOverlay: React.FC<Props> = ({ snapshot }) => {
   if (phase.phase === "blocked_secure_input") {
     return (
       <div className="hud-stage">
-        <div className="hud-capsule secure-blocked">
-          <Lock size={16} />
+        <div className="hud-capsule secure-blocked warn">
+          <Lock size={14} />
           <div className="hud-secure-text">{phase.message}</div>
         </div>
       </div>
@@ -78,8 +81,8 @@ export const HudOverlay: React.FC<Props> = ({ snapshot }) => {
   if (phase.phase === "failed") {
     return (
       <div className="hud-stage">
-        <div className="hud-capsule secure-blocked">
-          <AlertTriangle size={16} />
+        <div className="hud-capsule secure-blocked error">
+          <AlertTriangle size={14} />
           <div className="hud-secure-text">{phase.message}</div>
         </div>
       </div>

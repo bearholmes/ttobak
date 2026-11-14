@@ -1116,7 +1116,7 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
             <div className="preset-chips">
               {(
                 [
-                  { label: "우측 ⌥ (추천)", kind: { type: "right_option" } },
+                  { label: "우측 ⌥", kind: { type: "right_option" } },
                   { label: "좌측 ⌥", kind: { type: "left_option" } },
                   { label: "우측 ⌘", kind: { type: "right_command" } },
                   { label: "우측 ⌃", kind: { type: "right_control" } },

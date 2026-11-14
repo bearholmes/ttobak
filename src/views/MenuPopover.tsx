@@ -222,7 +222,7 @@ export const MenuPopover: React.FC<Props> = ({ snapshot }) => {
           >
             <span className="popover-menu-item-left">
               <Power size={14} strokeWidth={1.9} />
-              <span>또박 종료</span>
+              <span>종료</span>
             </span>
             <span className="popover-menu-kbd">⌘Q</span>
           </button>

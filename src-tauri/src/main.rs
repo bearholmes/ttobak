@@ -304,7 +304,7 @@ fn main() {
             let update_item =
                 MenuItem::with_id(app, "check_update", "업데이트 확인...", true, None::<&str>)?;
             let sep2 = PredefinedMenuItem::separator(app)?;
-            let quit_item = MenuItem::with_id(app, "quit", "또박 종료", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
             let fallback_menu = Menu::with_items(
                 app,
                 &[
