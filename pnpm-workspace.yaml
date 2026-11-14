@@ -1,3 +1,9 @@
 allowBuilds:
   "@parcel/watcher": false
   esbuild: true
+minimumReleaseAgeExclude:
+  - "@eslint/config-array"
+  - "@rolldown/pluginutils"
+  - "eslint"
+  - "node-releases"
+  - "postcss"
