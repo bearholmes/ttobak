@@ -8,9 +8,10 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition};
 use tracing::{error, info, warn};
 use ttobak_audio::{sweep_stale_recordings, ActiveAudioCapture};
 use ttobak_core::{
-    delete_models_in_dir, inspect_models_dir, is_newer_semver, AppConfig, AppPaths, AppSnapshot,
-    AppUpdateState, KeywordUsage, ModelDeleteTarget, ModelReadiness, ModelVariant,
-    PermissionSnapshot, PermissionState, SessionPhase, ShortcutConfig, UpdateManifest,
+    delete_models_in_dir, inspect_models_dir, is_newer_semver, parse_update_manifest_payload,
+    AppConfig, AppPaths, AppSnapshot, AppUpdateState, KeywordUsage, ModelDeleteTarget,
+    ModelReadiness, ModelVariant, PermissionSnapshot, PermissionState, SessionPhase,
+    ShortcutConfig, UpdateManifest, DEFAULT_GITHUB_RELEASE_URL,
 };
 use ttobak_macos::{
     hotkey::{GlobalHotkeyManager, HotkeyEvent},
@@ -354,37 +355,35 @@ impl SessionCoordinator {
                     .update_feed_url
                     .clone()
                     .filter(|s| !s.trim().is_empty())
-            });
+            })
+            .unwrap_or_else(|| DEFAULT_GITHUB_RELEASE_URL.to_string());
 
-        let next_state = match feed_url {
-            Some(url) => match fetch_remote_update_manifest(&url).await {
-                Ok(manifest) => {
-                    let current_ver = env!("CARGO_PKG_VERSION");
-                    if is_newer_semver(current_ver, &manifest.version) {
-                        AppUpdateState::Available {
-                            latest_version: manifest
-                                .version
-                                .trim()
-                                .trim_start_matches(['v', 'V'])
-                                .to_string(),
-                            download_url: manifest.download_url,
-                            release_notes: manifest.release_notes,
-                        }
-                    } else {
-                        AppUpdateState::UpToDate
+        let next_state = match fetch_remote_update_manifest(&feed_url).await {
+            Ok(Some(manifest)) => {
+                let current_ver = env!("CARGO_PKG_VERSION");
+                if is_newer_semver(current_ver, &manifest.version) {
+                    AppUpdateState::Available {
+                        latest_version: manifest
+                            .version
+                            .trim()
+                            .trim_start_matches(['v', 'V'])
+                            .to_string(),
+                        download_url: manifest.download_url,
+                        release_notes: manifest.release_notes,
                     }
+                } else {
+                    AppUpdateState::UpToDate
                 }
-                Err(err) => {
-                    warn!("앱 업데이트 확인 실패: {:#}", err);
-                    AppUpdateState::Error {
-                        message: format!("업데이트 서버에 연결하지 못했어요: {}", err),
-                    }
-                }
-            },
-            None => {
-                // 배포 피드 연결 전 로컬 빌드에서는 자연스러운 확인 피드백 후 최신 버전 상태를 표시
-                tokio::time::sleep(Duration::from_millis(380)).await;
+            }
+            Ok(None) => {
+                // GitHub Releases에 아직 게시된 릴리즈가 없는 경우 최신 버전으로 간주
                 AppUpdateState::UpToDate
+            }
+            Err(err) => {
+                warn!("앱 업데이트 확인 실패: {:#}", err);
+                AppUpdateState::Error {
+                    message: format!("업데이트 확인에 실패했어요: {}", err),
+                }
             }
         };
 
@@ -416,10 +415,36 @@ impl SessionCoordinator {
         };
         self.emit_snapshot(app);
 
-        Command::new("open")
-            .arg(&download_url)
-            .spawn()
-            .map_err(|e| anyhow!("업데이트 설치 파일 열기 실패: {}", e))?;
+        if is_direct_installer_url(&download_url) {
+            match download_and_open_installer(&download_url, &latest_version).await {
+                Ok(()) => {
+                    *self.app_update.lock() = AppUpdateState::Available {
+                        latest_version,
+                        download_url,
+                        release_notes,
+                    };
+                    self.emit_snapshot(app);
+                    return Ok(());
+                }
+                Err(err) => {
+                    warn!("설치 파일 직접 다운로드 실패, 브라우저 열기로 전환: {:#}", err);
+                    // 직접 다운로드 실패 시에도 사용자가 릴리즈 에셋 URL을 브라우저로 열 수 있도록 fallback
+                    if let Err(open_err) = Command::new("open").arg(&download_url).spawn() {
+                        let msg = format!("업데이트 설치 파일 열기 실패: {}", open_err);
+                        *self.app_update.lock() = AppUpdateState::Error {
+                            message: msg.clone(),
+                        };
+                        self.emit_snapshot(app);
+                        return Err(anyhow!(msg));
+                    }
+                }
+            }
+        } else {
+            Command::new("open")
+                .arg(&download_url)
+                .spawn()
+                .map_err(|e| anyhow!("업데이트 페이지 열기 실패: {}", e))?;
+        }
 
         let coord = Arc::clone(self);
         let app_clone = app.clone();
@@ -996,15 +1021,76 @@ impl SessionCoordinator {
     }
 }
 
-async fn fetch_remote_update_manifest(url: &str) -> Result<UpdateManifest> {
+async fn fetch_remote_update_manifest(url: &str) -> Result<Option<UpdateManifest>> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .user_agent(format!("ttobak/{}", env!("CARGO_PKG_VERSION")))
         .build()?;
-    let resp = client.get(url).send().await?.error_for_status()?;
+    let resp = client
+        .get(url)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await?;
+
+    let status = resp.status();
+    if status == reqwest::StatusCode::NOT_FOUND && url.contains("api.github.com/repos/") {
+        return Ok(None);
+    }
+    if status == reqwest::StatusCode::FORBIDDEN || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+    {
+        return Err(anyhow!(
+            "GitHub API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
+        ));
+    }
+
+    let resp = resp.error_for_status()?;
     let body = resp.text().await?;
-    let manifest: UpdateManifest = serde_json::from_str(&body)?;
-    Ok(manifest)
+    let manifest = parse_update_manifest_payload(&body, std::env::consts::ARCH)?;
+    Ok(Some(manifest))
+}
+
+fn is_direct_installer_url(url: &str) -> bool {
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+    let lower = path.to_ascii_lowercase();
+    lower.ends_with(".dmg")
+        || lower.ends_with(".pkg")
+        || lower.ends_with(".zip")
+        || lower.ends_with(".app.tar.gz")
+}
+
+async fn download_and_open_installer(url: &str, version: &str) -> Result<()> {
+    let file_name = url
+        .split(['?', '#'])
+        .next()
+        .and_then(|path| path.rsplit('/').next())
+        .filter(|name| !name.is_empty())
+        .map(|name| name.to_string())
+        .unwrap_or_else(|| format!("ttobak-{}.dmg", version));
+
+    let download_dir = dirs::download_dir().unwrap_or_else(std::env::temp_dir);
+    tokio::fs::create_dir_all(&download_dir).await?;
+    let dest_path = download_dir.join(&file_name);
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(180))
+        .user_agent(format!("ttobak/{}", env!("CARGO_PKG_VERSION")))
+        .build()?;
+    let bytes = client
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?;
+
+    tokio::fs::write(&dest_path, &bytes).await?;
+
+    Command::new("open")
+        .arg(&dest_path)
+        .spawn()
+        .map_err(|e| anyhow!("다운로드한 설치 파일 열기 실패: {}", e))?;
+
+    Ok(())
 }
 
 pub fn show_settings_window(app: &AppHandle) {

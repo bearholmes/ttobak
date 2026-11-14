@@ -280,6 +280,10 @@ pub enum AppUpdateState {
     },
 }
 
+/// 기본 GitHub Releases 최신 릴리즈 API 엔드포인트
+pub const DEFAULT_GITHUB_RELEASE_URL: &str =
+    "https://api.github.com/repos/bearholmes/ttobak/releases/latest";
+
 /// 원격 업데이트 매니페스트(`latest.json`) 응답 규격
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateManifest {
@@ -287,6 +291,101 @@ pub struct UpdateManifest {
     pub download_url: String,
     #[serde(default)]
     pub release_notes: Option<String>,
+}
+
+/// GitHub Releases API 에셋 항목
+#[derive(Debug, Clone, Deserialize)]
+struct GitHubReleaseAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+/// GitHub Releases API `/releases/latest` 응답 규격
+#[derive(Debug, Clone, Deserialize)]
+struct GitHubRelease {
+    tag_name: String,
+    html_url: String,
+    #[serde(default)]
+    body: Option<String>,
+    #[serde(default)]
+    assets: Vec<GitHubReleaseAsset>,
+}
+
+/// GitHub 릴리즈 에셋 목록에서 현재 macOS 아키텍처에 가장 적합한 설치 파일 URL을 선택합니다.
+fn select_macos_asset_url(assets: &[GitHubReleaseAsset], arch: &str) -> Option<String> {
+    let arch_tokens: &[&str] = match arch {
+        "aarch64" | "arm64" => &["aarch64", "arm64", "apple-silicon"],
+        "x86_64" | "x64" => &["x86_64", "x64", "intel"],
+        _ => &[],
+    };
+
+    let matches_arch = |name: &str| -> bool {
+        let lower = name.to_ascii_lowercase();
+        arch_tokens.iter().any(|token| lower.contains(token))
+    };
+
+    let pick_by_extensions = |exts: &[&str]| -> Option<String> {
+        let matching: Vec<&GitHubReleaseAsset> = assets
+            .iter()
+            .filter(|asset| {
+                let lower = asset.name.to_ascii_lowercase();
+                exts.iter().any(|ext| lower.ends_with(ext))
+            })
+            .collect();
+
+        matching
+            .iter()
+            .find(|asset| matches_arch(&asset.name))
+            .or_else(|| matching.first())
+            .map(|asset| asset.browser_download_url.clone())
+    };
+
+    pick_by_extensions(&[".dmg"])
+        .or_else(|| pick_by_extensions(&[".pkg", ".app.tar.gz", ".zip"]))
+}
+
+/// 릴리즈 노트 본문에서 UI 한 줄 요약용 텍스트를 추출합니다.
+pub fn summarize_release_notes(raw: &str) -> Option<String> {
+    for line in raw.lines() {
+        let trimmed = line
+            .trim()
+            .trim_start_matches(['#', '-', '*', '>'])
+            .trim();
+        if trimmed.is_empty()
+            || trimmed.chars().all(|c| c == '-' || c == '*' || c == '=')
+        {
+            continue;
+        }
+        let max_chars = 100;
+        let summary = if trimmed.chars().count() > max_chars {
+            let prefix: String = trimmed.chars().take(max_chars).collect();
+            format!("{}…", prefix.trim_end())
+        } else {
+            trimmed.to_string()
+        };
+        return Some(summary);
+    }
+    None
+}
+
+/// 커스텀 `latest.json` 또는 GitHub Releases API JSON 응답을 `UpdateManifest`로 변환합니다.
+pub fn parse_update_manifest_payload(
+    body: &str,
+    arch: &str,
+) -> std::result::Result<UpdateManifest, serde_json::Error> {
+    if let Ok(manifest) = serde_json::from_str::<UpdateManifest>(body) {
+        return Ok(manifest);
+    }
+
+    let release: GitHubRelease = serde_json::from_str(body)?;
+    let download_url = select_macos_asset_url(&release.assets, arch).unwrap_or(release.html_url);
+    let release_notes = release.body.as_deref().and_then(summarize_release_notes);
+
+    Ok(UpdateManifest {
+        version: release.tag_name,
+        download_url,
+        release_notes,
+    })
 }
 
 /// SemVer(`major.minor.patch`) 기준으로 새 버전 여부를 판별합니다.
@@ -521,6 +620,56 @@ mod tests {
         assert!(is_newer_semver("0.1.0", "1.0.0-rc1"));
         assert!(!is_newer_semver("0.1.0", "0.1.0"));
         assert!(!is_newer_semver("0.2.0", "0.1.9"));
+    }
+
+    #[test]
+    fn test_parse_update_manifest_payload_supports_custom_and_github_release() {
+        let custom = r#"{
+            "version": "0.2.0",
+            "download_url": "https://example.com/ttobak.dmg",
+            "release_notes": "성능 개선"
+        }"#;
+        let parsed_custom = parse_update_manifest_payload(custom, "aarch64").unwrap();
+        assert_eq!(parsed_custom.version, "0.2.0");
+        assert_eq!(parsed_custom.download_url, "https://example.com/ttobak.dmg");
+        assert_eq!(parsed_custom.release_notes.as_deref(), Some("성능 개선"));
+
+        let github = r###"{
+            "tag_name": "v0.3.0",
+            "html_url": "https://github.com/bearholmes/ttobak/releases/tag/v0.3.0",
+            "body": "## 변경 사항\n- 음성 인식 정확도 향상\n- 버그 수정",
+            "assets": [
+                {
+                    "name": "ttobak_0.3.0_x64.dmg",
+                    "browser_download_url": "https://github.com/bearholmes/ttobak/releases/download/v0.3.0/ttobak_0.3.0_x64.dmg"
+                },
+                {
+                    "name": "ttobak_0.3.0_aarch64.dmg",
+                    "browser_download_url": "https://github.com/bearholmes/ttobak/releases/download/v0.3.0/ttobak_0.3.0_aarch64.dmg"
+                }
+            ]
+        }"###;
+        let parsed_arm = parse_update_manifest_payload(github, "aarch64").unwrap();
+        assert_eq!(parsed_arm.version, "v0.3.0");
+        assert_eq!(
+            parsed_arm.download_url,
+            "https://github.com/bearholmes/ttobak/releases/download/v0.3.0/ttobak_0.3.0_aarch64.dmg"
+        );
+        assert_eq!(parsed_arm.release_notes.as_deref(), Some("변경 사항"));
+
+        let github_no_assets = r#"{
+            "tag_name": "v0.3.1",
+            "html_url": "https://github.com/bearholmes/ttobak/releases/tag/v0.3.1",
+            "body": "",
+            "assets": []
+        }"#;
+        let parsed_fallback = parse_update_manifest_payload(github_no_assets, "aarch64").unwrap();
+        assert_eq!(parsed_fallback.version, "v0.3.1");
+        assert_eq!(
+            parsed_fallback.download_url,
+            "https://github.com/bearholmes/ttobak/releases/tag/v0.3.1"
+        );
+        assert_eq!(parsed_fallback.release_notes, None);
     }
 
     #[test]

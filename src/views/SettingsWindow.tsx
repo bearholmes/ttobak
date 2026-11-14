@@ -334,7 +334,7 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
           ? `v${appUpdate.latest_version} 출시 · ${appUpdate.release_notes}`
           : `새 버전(v${appUpdate.latest_version}) 업데이트 가능`;
       case "applying":
-        return `v${appUpdate.latest_version} 설치 파일 여는 중...`;
+        return `v${appUpdate.latest_version} 설치 파일 다운로드 및 여는 중...`;
       case "error":
         return appUpdate.message;
     }
