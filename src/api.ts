@@ -127,13 +127,13 @@ export const ttobakApi = {
       ? invoke<void>("delete_models", { target })
       : Promise.resolve(),
   revealModelsFolder: () =>
-    isTauriRuntime()
-      ? invoke<void>("reveal_models_folder")
-      : Promise.resolve(),
+    isTauriRuntime() ? invoke<void>("reveal_models_folder") : Promise.resolve(),
   openExternalUrl: (url: string) =>
     isTauriRuntime()
       ? invoke<void>("open_external_url", { url })
-      : Promise.resolve(window.open(url, "_blank", "noopener,noreferrer") as unknown as void),
+      : Promise.resolve(
+          window.open(url, "_blank", "noopener,noreferrer") as unknown as void,
+        ),
   checkAppUpdate: () =>
     isTauriRuntime() ? invoke<void>("check_app_update") : Promise.resolve(),
   applyAppUpdate: () =>

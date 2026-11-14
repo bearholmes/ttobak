@@ -52,70 +52,71 @@ function parseKeywordList(raw: string): string[] {
   return seen;
 }
 
-const DOM_CODE_TO_MAC_KEYCODE: Record<string, { code: number; label: string }> = {
-  Space: { code: 49, label: "Space" },
-  Enter: { code: 36, label: "Return" },
-  Tab: { code: 48, label: "Tab" },
-  Backquote: { code: 50, label: "`" },
-  Minus: { code: 27, label: "-" },
-  Equal: { code: 24, label: "=" },
-  BracketLeft: { code: 33, label: "[" },
-  BracketRight: { code: 30, label: "]" },
-  Backslash: { code: 42, label: "\\" },
-  Period: { code: 47, label: "." },
-  Comma: { code: 43, label: "," },
-  Slash: { code: 44, label: "/" },
-  Semicolon: { code: 41, label: ";" },
-  Quote: { code: 39, label: "'" },
-  KeyA: { code: 0, label: "A" },
-  KeyS: { code: 1, label: "S" },
-  KeyD: { code: 2, label: "D" },
-  KeyF: { code: 3, label: "F" },
-  KeyH: { code: 4, label: "H" },
-  KeyG: { code: 5, label: "G" },
-  KeyZ: { code: 6, label: "Z" },
-  KeyX: { code: 7, label: "X" },
-  KeyC: { code: 8, label: "C" },
-  KeyV: { code: 9, label: "V" },
-  KeyB: { code: 11, label: "B" },
-  KeyQ: { code: 12, label: "Q" },
-  KeyW: { code: 13, label: "W" },
-  KeyE: { code: 14, label: "E" },
-  KeyR: { code: 15, label: "R" },
-  KeyY: { code: 16, label: "Y" },
-  KeyT: { code: 17, label: "T" },
-  Digit1: { code: 18, label: "1" },
-  Digit2: { code: 19, label: "2" },
-  Digit3: { code: 20, label: "3" },
-  Digit4: { code: 21, label: "4" },
-  Digit6: { code: 22, label: "6" },
-  Digit5: { code: 23, label: "5" },
-  Digit9: { code: 25, label: "9" },
-  Digit7: { code: 26, label: "7" },
-  Digit8: { code: 28, label: "8" },
-  Digit0: { code: 29, label: "0" },
-  KeyO: { code: 31, label: "O" },
-  KeyU: { code: 32, label: "U" },
-  KeyI: { code: 34, label: "I" },
-  KeyP: { code: 35, label: "P" },
-  KeyL: { code: 37, label: "L" },
-  KeyJ: { code: 38, label: "J" },
-  KeyK: { code: 40, label: "K" },
-  KeyN: { code: 45, label: "N" },
-  KeyM: { code: 46, label: "M" },
-  F1: { code: 122, label: "F1" },
-  F2: { code: 120, label: "F2" },
-  F3: { code: 99, label: "F3" },
-  F4: { code: 118, label: "F4" },
-  F5: { code: 96, label: "F5" },
-  F6: { code: 97, label: "F6" },
-  F7: { code: 98, label: "F7" },
-  F8: { code: 100, label: "F8" },
-  F9: { code: 101, label: "F9" },
-  F10: { code: 109, label: "F10" },
-  F11: { code: 103, label: "F11" },
-  F12: { code: 111, label: "F12" },
-};
+const DOM_CODE_TO_MAC_KEYCODE: Record<string, { code: number; label: string }> =
+  {
+    Space: { code: 49, label: "Space" },
+    Enter: { code: 36, label: "Return" },
+    Tab: { code: 48, label: "Tab" },
+    Backquote: { code: 50, label: "`" },
+    Minus: { code: 27, label: "-" },
+    Equal: { code: 24, label: "=" },
+    BracketLeft: { code: 33, label: "[" },
+    BracketRight: { code: 30, label: "]" },
+    Backslash: { code: 42, label: "\\" },
+    Period: { code: 47, label: "." },
+    Comma: { code: 43, label: "," },
+    Slash: { code: 44, label: "/" },
+    Semicolon: { code: 41, label: ";" },
+    Quote: { code: 39, label: "'" },
+    KeyA: { code: 0, label: "A" },
+    KeyS: { code: 1, label: "S" },
+    KeyD: { code: 2, label: "D" },
+    KeyF: { code: 3, label: "F" },
+    KeyH: { code: 4, label: "H" },
+    KeyG: { code: 5, label: "G" },
+    KeyZ: { code: 6, label: "Z" },
+    KeyX: { code: 7, label: "X" },
+    KeyC: { code: 8, label: "C" },
+    KeyV: { code: 9, label: "V" },
+    KeyB: { code: 11, label: "B" },
+    KeyQ: { code: 12, label: "Q" },
+    KeyW: { code: 13, label: "W" },
+    KeyE: { code: 14, label: "E" },
+    KeyR: { code: 15, label: "R" },
+    KeyY: { code: 16, label: "Y" },
+    KeyT: { code: 17, label: "T" },
+    Digit1: { code: 18, label: "1" },
+    Digit2: { code: 19, label: "2" },
+    Digit3: { code: 20, label: "3" },
+    Digit4: { code: 21, label: "4" },
+    Digit6: { code: 22, label: "6" },
+    Digit5: { code: 23, label: "5" },
+    Digit9: { code: 25, label: "9" },
+    Digit7: { code: 26, label: "7" },
+    Digit8: { code: 28, label: "8" },
+    Digit0: { code: 29, label: "0" },
+    KeyO: { code: 31, label: "O" },
+    KeyU: { code: 32, label: "U" },
+    KeyI: { code: 34, label: "I" },
+    KeyP: { code: 35, label: "P" },
+    KeyL: { code: 37, label: "L" },
+    KeyJ: { code: 38, label: "J" },
+    KeyK: { code: 40, label: "K" },
+    KeyN: { code: 45, label: "N" },
+    KeyM: { code: 46, label: "M" },
+    F1: { code: 122, label: "F1" },
+    F2: { code: 120, label: "F2" },
+    F3: { code: 99, label: "F3" },
+    F4: { code: 118, label: "F4" },
+    F5: { code: 96, label: "F5" },
+    F6: { code: 97, label: "F6" },
+    F7: { code: 98, label: "F7" },
+    F8: { code: 100, label: "F8" },
+    F9: { code: 101, label: "F9" },
+    F10: { code: 109, label: "F10" },
+    F11: { code: 103, label: "F11" },
+    F12: { code: 111, label: "F12" },
+  };
 
 function renderKindLabel(kind: ShortcutKind): string {
   switch (kind.type) {
@@ -144,16 +145,18 @@ function renderKindLabel(kind: ShortcutKind): string {
 export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
   const [activeTab, setActiveTab] = useState<TabKey>("general");
   const [keywordsList, setKeywordsList] = useState<string[]>(() =>
-    parseKeywordList(snapshot.config.keywords_raw)
+    parseKeywordList(snapshot.config.keywords_raw),
   );
   const [keywordInput, setKeywordInput] = useState("");
-  const [liveUsage, setLiveUsage] = useState<KeywordUsage>(snapshot.keyword_usage);
+  const [liveUsage, setLiveUsage] = useState<KeywordUsage>(
+    snapshot.keyword_usage,
+  );
   const [savedToast, setSavedToast] = useState(false);
   const toastTimerRef = useRef<number | null>(null);
 
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   const [draftShortcut, setDraftShortcut] = useState<ShortcutConfig>(
-    snapshot.config.shortcut
+    snapshot.config.shortcut,
   );
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -197,19 +200,31 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
       }
 
       if (e.code === "AltRight") {
-        setDraftShortcut((prev) => ({ ...prev, kind: { type: "right_option" } }));
+        setDraftShortcut((prev) => ({
+          ...prev,
+          kind: { type: "right_option" },
+        }));
         return;
       }
       if (e.code === "AltLeft") {
-        setDraftShortcut((prev) => ({ ...prev, kind: { type: "left_option" } }));
+        setDraftShortcut((prev) => ({
+          ...prev,
+          kind: { type: "left_option" },
+        }));
         return;
       }
       if (e.code === "MetaRight") {
-        setDraftShortcut((prev) => ({ ...prev, kind: { type: "right_command" } }));
+        setDraftShortcut((prev) => ({
+          ...prev,
+          kind: { type: "right_command" },
+        }));
         return;
       }
       if (e.code === "ControlRight") {
-        setDraftShortcut((prev) => ({ ...prev, kind: { type: "right_control" } }));
+        setDraftShortcut((prev) => ({
+          ...prev,
+          kind: { type: "right_control" },
+        }));
         return;
       }
 
@@ -246,7 +261,9 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
     for (const w of pending) {
       if (!previewMerged.includes(w)) previewMerged.push(w);
     }
-    const preview = await ttobakApi.previewKeywordUsage(previewMerged.join(", "));
+    const preview = await ttobakApi.previewKeywordUsage(
+      previewMerged.join(", "),
+    );
     setLiveUsage(preview);
   };
 
@@ -295,7 +312,8 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
   const appUpdate = snapshot.app_update;
   const currentVariant: ModelVariant = snapshot.config.model_variant ?? "fp16";
   const variantSizeLabel = currentVariant === "q8_0" ? "874MB" : "1.62GB";
-  const hasBothVariantsOnDisk = storage.fp16_bytes > 0 && storage.q8_0_bytes > 0;
+  const hasBothVariantsOnDisk =
+    storage.fp16_bytes > 0 && storage.q8_0_bytes > 0;
   const hasAnyModelFiles = storage.total_bytes > 0;
   const isModelBusy =
     readiness.state === "downloading" ||
@@ -474,7 +492,9 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                       {snapshot.config.shortcut.hold_ms > 0 && (
                         <small>
                           {" "}
-                          · {(snapshot.config.shortcut.hold_ms / 1000).toFixed(1)}초
+                          ·{" "}
+                          {(snapshot.config.shortcut.hold_ms / 1000).toFixed(1)}
+                          초
                         </small>
                       )}
                     </div>
@@ -505,7 +525,7 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                       }`}
                       onClick={() =>
                         void ttobakApi.setLaunchAtLogin(
-                          !snapshot.config.launch_at_login
+                          !snapshot.config.launch_at_login,
                         )
                       }
                     >
@@ -534,7 +554,9 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                     <div>
                       <div className="row-title">마이크 접근</div>
                       {!micGranted && (
-                        <div className="row-desc">음성 입력을 위해 필요합니다.</div>
+                        <div className="row-desc">
+                          음성 입력을 위해 필요합니다.
+                        </div>
                       )}
                     </div>
                   </div>
@@ -650,22 +672,22 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                       <div className="row-desc">
                         {readiness.state === "ready"
                           ? `${readiness.model_name} · ${formatBytes(
-                              storage.total_bytes
+                              storage.total_bytes,
                             )}${
                               hasBothVariantsOnDisk ? " (표준·경량 보관됨)" : ""
                             }`
                           : readiness.state === "downloading"
                             ? `${readiness.stage} · ${formatBytes(
-                                readiness.downloaded_bytes
+                                readiness.downloaded_bytes,
                               )} / ${formatBytes(
-                                readiness.total_bytes
+                                readiness.total_bytes,
                               )} (${Math.round(readiness.progress * 100)}%)`
                             : readiness.state === "loading"
                               ? "Metal 엔진 불러오는 중..."
                               : `미설치${
                                   hasAnyModelFiles
                                     ? ` · 기타 ${formatBytes(
-                                        storage.total_bytes
+                                        storage.total_bytes,
                                       )} 보관 중`
                                     : ""
                                 }`}
@@ -677,7 +699,7 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                             style={{
                               width: `${Math.max(
                                 2,
-                                Math.round(readiness.progress * 100)
+                                Math.round(readiness.progress * 100),
                               )}%`,
                             }}
                           />
@@ -837,7 +859,9 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                   className="dict-input"
                   placeholder="등록할 단어 입력 후 Enter (쉼표로 여러 개 추가 가능)"
                   value={keywordInput}
-                  onChange={(e) => void handleKeywordInputChange(e.target.value)}
+                  onChange={(e) =>
+                    void handleKeywordInputChange(e.target.value)
+                  }
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                       e.preventDefault();
@@ -864,7 +888,7 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                   style={{
                     width: `${Math.min(
                       100,
-                      Math.round((liveUsage.tokens / liveUsage.limit) * 100)
+                      Math.round((liveUsage.tokens / liveUsage.limit) * 100),
                     )}%`,
                   }}
                 />
@@ -929,8 +953,9 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                     <div>
                       <div className="row-title">어떤 단어를 넣나요?</div>
                       <div className="row-desc">
-                        발음이 비슷해 자주 오인식되는 인명, 회사·제품·프로젝트명,
-                        사내 약어, 영문 기술 용어의 정확한 표기를 등록합니다.
+                        발음이 비슷해 자주 오인식되는 인명,
+                        회사·제품·프로젝트명, 사내 약어, 영문 기술 용어의 정확한
+                        표기를 등록합니다.
                       </div>
                     </div>
                   </div>
@@ -941,8 +966,9 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                     <div>
                       <div className="row-title">어떻게 인식률을 높이나요?</div>
                       <div className="row-desc">
-                        등록된 용어를 Whisper 음성 모델의 초기 컨텍스트 프롬프트로
-                        전달해 해당 표기를 우선 선택하도록 유도합니다.
+                        등록된 용어를 Whisper 음성 모델의 초기 컨텍스트
+                        프롬프트로 전달해 해당 표기를 우선 선택하도록
+                        유도합니다.
                       </div>
                     </div>
                   </div>
@@ -951,12 +977,14 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                 <div className="setting-row">
                   <div className="setting-left">
                     <div>
-                      <div className="row-title">{liveUsage.limit}토큰 용량 제한</div>
+                      <div className="row-title">
+                        {liveUsage.limit}토큰 용량 제한
+                      </div>
                       <div className="row-desc">
                         환각 현상과 문장 스타일 깨짐을 방지하기 위해 최대{" "}
                         {liveUsage.limit}토큰(한글 약 15~25단어, 영문 약
-                        30~45단어)까지만 반영됩니다. 이미 잘 인식되는 일반 단어는
-                        비워 두세요.
+                        30~45단어)까지만 반영됩니다. 이미 잘 인식되는 일반
+                        단어는 비워 두세요.
                       </div>
                     </div>
                   </div>
@@ -1127,7 +1155,9 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                   key={preset.label}
                   type="button"
                   className={`preset-chip ${
-                    draftShortcut.kind.type === preset.kind.type ? "selected" : ""
+                    draftShortcut.kind.type === preset.kind.type
+                      ? "selected"
+                      : ""
                   }`}
                   onClick={() =>
                     setDraftShortcut((prev) => ({ ...prev, kind: preset.kind }))
@@ -1195,8 +1225,8 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
           <div className="modal-panel">
             <h3>음성 인식 모델 삭제</h3>
             <p className="modal-desc">
-              로컬 모델 파일을 삭제해 저장 공간을 확보합니다. 다시 사용하려면 새로
-              다운로드해야 합니다.
+              로컬 모델 파일을 삭제해 저장 공간을 확보합니다. 다시 사용하려면
+              새로 다운로드해야 합니다.
             </p>
 
             {hasBothVariantsOnDisk && (

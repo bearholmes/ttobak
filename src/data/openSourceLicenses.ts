@@ -155,7 +155,8 @@ export const OPEN_SOURCE_CATEGORIES: OpenSourceCategory[] = [
       },
       {
         name: "Rust 유틸리티 크레이트 모음",
-        version: "anyhow · thiserror · tracing · parking_lot · sha2 · hex · uuid · dirs",
+        version:
+          "anyhow · thiserror · tracing · parking_lot · sha2 · hex · uuid · dirs",
         license: "MIT / Apache-2.0",
         spdxUrl: "https://spdx.org/licenses/MIT.html",
         copyright: "Rust Community Contributors",
