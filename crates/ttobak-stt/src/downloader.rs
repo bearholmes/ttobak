@@ -100,7 +100,7 @@ where
         .await?;
     }
 
-    // 3. 선택된 Whisper large-v3-turbo 모델 (FP16 ~1.62GB 또는 Q8_0 ~874MB)
+    // 3. 선택된 Whisper / batisay-ko-base 모델 다운로드
     let whisper_ok = fs::metadata(&files.whisper_bin)
         .await
         .map(|m| m.len() >= variant.min_valid_bytes())
@@ -109,6 +109,8 @@ where
         let stage_msg = match variant {
             ModelVariant::Fp16 => "Whisper large-v3-turbo 표준(FP16) 모델 다운로드 중",
             ModelVariant::Q8_0 => "Whisper large-v3-turbo 경량(Q8_0) 모델 다운로드 중",
+            ModelVariant::BatisayKoBase => "batisay-ko-base 표준(FP16) 모델 다운로드 중",
+            ModelVariant::BatisayKoBaseQ5_0 => "batisay-ko-base 경량(Q5_0) 모델 다운로드 중",
         };
         download_with_resume(
             &client,

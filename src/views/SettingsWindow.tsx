@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Plus,
   X,
+  ChevronDown,
 } from "lucide-react";
 import type {
   AppSnapshot,
@@ -31,6 +32,61 @@ interface Props {
 }
 
 type TabKey = "general" | "keywords" | "privacy" | "licenses";
+
+interface ModelVariantOption {
+  value: ModelVariant;
+  group: string;
+  optionLabel: string;
+  shortLabel: string;
+  sizeLabel: string;
+  desc: string;
+}
+
+const MODEL_VARIANT_OPTIONS: ModelVariantOption[] = [
+  {
+    value: "fp16",
+    group: "Whisper large-v3-turbo (범용)",
+    optionLabel: "Whisper Turbo · 표준 (1.62GB)",
+    shortLabel: "Whisper Turbo 표준",
+    sizeLabel: "1.62GB",
+    desc: "FP16 무손실 · 한국어/영어 범용",
+  },
+  {
+    value: "q8_0",
+    group: "Whisper large-v3-turbo (범용)",
+    optionLabel: "Whisper Turbo · 경량 Q8 (874MB)",
+    shortLabel: "Whisper Turbo 경량",
+    sizeLabel: "874MB",
+    desc: "Q8_0 양자화 · 메모리 절약",
+  },
+  {
+    value: "batisay_ko_base",
+    group: "batisay-ko-base (한국어 특화)",
+    optionLabel: "batisay-ko-base · 표준 (1.62GB)",
+    shortLabel: "batisay-ko-base 표준",
+    sizeLabel: "1.62GB",
+    desc: "한국어 파인튜닝 · FP16 고품질",
+  },
+  {
+    value: "batisay_ko_base_q5_0",
+    group: "batisay-ko-base (한국어 특화)",
+    optionLabel: "batisay-ko-base · 경량 Q5 (574MB)",
+    shortLabel: "batisay-ko-base 경량",
+    sizeLabel: "574MB",
+    desc: "한국어 파인튜닝 · Q5_0 초경량",
+  },
+];
+
+const MODEL_VARIANT_GROUPS = Array.from(
+  new Set(MODEL_VARIANT_OPTIONS.map((opt) => opt.group)),
+);
+
+function getModelVariantOption(variant: ModelVariant): ModelVariantOption {
+  return (
+    MODEL_VARIANT_OPTIONS.find((opt) => opt.value === variant) ??
+    MODEL_VARIANT_OPTIONS[0]
+  );
+}
 
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return "0 MB";
@@ -311,9 +367,10 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
   const storage = snapshot.model_storage;
   const appUpdate = snapshot.app_update;
   const currentVariant: ModelVariant = snapshot.config.model_variant ?? "fp16";
-  const variantSizeLabel = currentVariant === "q8_0" ? "874MB" : "1.62GB";
-  const hasBothVariantsOnDisk =
-    storage.fp16_bytes > 0 && storage.q8_0_bytes > 0;
+  const currentVariantMeta = getModelVariantOption(currentVariant);
+  const variantSizeLabel = currentVariantMeta.sizeLabel;
+  const variantsOnDisk = (storage.variants ?? []).filter((v) => v.bytes > 0);
+  const hasMultipleVariantsOnDisk = variantsOnDisk.length > 1;
   const hasAnyModelFiles = storage.total_bytes > 0;
   const isModelBusy =
     readiness.state === "downloading" ||
@@ -625,40 +682,40 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                 <div className="setting-row">
                   <div className="setting-left">
                     <div>
-                      <div className="row-title">모델 크기</div>
-                      <div className="row-desc">
-                        {currentVariant === "fp16"
-                          ? "FP16 무손실 · 최고 정확도"
-                          : "Q8_0 양자화 · 메모리 절약"}
-                      </div>
+                      <div className="row-title">음성 모델</div>
+                      <div className="row-desc">{currentVariantMeta.desc}</div>
                     </div>
                   </div>
                   <div className="setting-right">
-                    <div
-                      className="variant-segmented"
-                      role="radiogroup"
-                      aria-label="모델 크기 선택"
-                    >
-                      <button
-                        type="button"
+                    <div className="model-select-wrap">
+                      <select
+                        className="model-select"
+                        aria-label="음성 모델 선택"
                         disabled={isModelBusy}
-                        className={`seg-btn ${
-                          currentVariant === "fp16" ? "active" : ""
-                        }`}
-                        onClick={() => void handleVariantSelect("fp16")}
+                        value={currentVariant}
+                        onChange={(e) =>
+                          void handleVariantSelect(
+                            e.target.value as ModelVariant,
+                          )
+                        }
                       >
-                        표준 1.62GB
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isModelBusy}
-                        className={`seg-btn ${
-                          currentVariant === "q8_0" ? "active" : ""
-                        }`}
-                        onClick={() => void handleVariantSelect("q8_0")}
-                      >
-                        경량 874MB
-                      </button>
+                        {MODEL_VARIANT_GROUPS.map((group) => (
+                          <optgroup key={group} label={group}>
+                            {MODEL_VARIANT_OPTIONS.filter(
+                              (opt) => opt.group === group,
+                            ).map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.optionLabel}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        size={13}
+                        className="model-select-chevron"
+                        aria-hidden="true"
+                      />
                     </div>
                   </div>
                 </div>
@@ -672,7 +729,9 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                           ? `${readiness.model_name} · ${formatBytes(
                               storage.total_bytes,
                             )}${
-                              hasBothVariantsOnDisk ? " (표준·경량 보관됨)" : ""
+                              hasMultipleVariantsOnDisk
+                                ? ` (${variantsOnDisk.length}개 모델 보관됨)`
+                                : ""
                             }`
                           : readiness.state === "downloading"
                             ? `${readiness.stage} · ${formatBytes(
@@ -1227,28 +1286,23 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
               새로 다운로드해야 합니다.
             </p>
 
-            {hasBothVariantsOnDisk && (
+            {hasMultipleVariantsOnDisk && (
               <div>
                 <div className="hold-title">삭제 대상</div>
-                <div className="hold-buttons">
-                  <button
-                    type="button"
-                    className={`hold-btn ${
-                      deleteTarget === "fp16" ? "selected" : ""
-                    }`}
-                    onClick={() => setDeleteTarget("fp16")}
-                  >
-                    표준 ({formatBytes(storage.fp16_bytes)})
-                  </button>
-                  <button
-                    type="button"
-                    className={`hold-btn ${
-                      deleteTarget === "q8_0" ? "selected" : ""
-                    }`}
-                    onClick={() => setDeleteTarget("q8_0")}
-                  >
-                    경량 ({formatBytes(storage.q8_0_bytes)})
-                  </button>
+                <div className="delete-target-buttons">
+                  {variantsOnDisk.map((item) => (
+                    <button
+                      key={item.variant}
+                      type="button"
+                      className={`hold-btn ${
+                        deleteTarget === item.variant ? "selected" : ""
+                      }`}
+                      onClick={() => setDeleteTarget(item.variant)}
+                    >
+                      {getModelVariantOption(item.variant).shortLabel} (
+                      {formatBytes(item.bytes)})
+                    </button>
+                  ))}
                   <button
                     type="button"
                     className={`hold-btn ${
@@ -1266,11 +1320,12 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
               <div className="model-storage-meta">
                 <span className="model-storage-label">확보 용량</span>
                 <strong className="model-storage-size">
-                  {deleteTarget === "fp16"
-                    ? formatBytes(storage.fp16_bytes)
-                    : deleteTarget === "q8_0"
-                      ? formatBytes(storage.q8_0_bytes)
-                      : formatBytes(storage.total_bytes)}
+                  {deleteTarget === "all"
+                    ? formatBytes(storage.total_bytes)
+                    : formatBytes(
+                        variantsOnDisk.find((v) => v.variant === deleteTarget)
+                          ?.bytes ?? 0,
+                      )}
                 </strong>
               </div>
               <div className="model-storage-path-row">

@@ -524,12 +524,9 @@ impl SessionCoordinator {
         }
 
         let current_variant = self.config.lock().model_variant;
-        let affects_current = matches!(
-            (target, current_variant),
-            (ModelDeleteTarget::All, _)
-                | (ModelDeleteTarget::Fp16, ModelVariant::Fp16)
-                | (ModelDeleteTarget::Q8_0, ModelVariant::Q8_0)
-        );
+        let affects_current = target
+            .as_variant()
+            .map_or(true, |v| v == current_variant);
 
         if affects_current {
             // 파일 삭제 전 메모리 및 Metal GPU 컨텍스트 즉시 해제

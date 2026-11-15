@@ -91,22 +91,36 @@ impl ShortcutConfig {
     }
 }
 
-/// 온디바이스 Whisper 모델 사양 (표준 FP16 vs 경량 Q8_0)
+/// 온디바이스 Whisper 모델 사양
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelVariant {
-    /// 기본 추천: 무손실 FP16 (`ggml-large-v3-turbo.bin`, ~1.62GB)
+    /// 기본 추천: Whisper large-v3-turbo 무손실 FP16 (`ggml-large-v3-turbo.bin`, ~1.62GB)
     #[default]
     Fp16,
-    /// 경량 모드: 8비트 양자화 (`ggml-large-v3-turbo-q8_0.bin`, ~874MB)
+    /// Whisper large-v3-turbo 경량 Q8_0 (`ggml-large-v3-turbo-q8_0.bin`, ~874MB)
     Q8_0,
+    /// 한국어 파인튜닝: batiai/batisay-ko-base 표준 FP16 (`ggml-batisay-ko-base.bin`, ~1.62GB)
+    BatisayKoBase,
+    /// 한국어 파인튜닝: batiai/batisay-ko-base 경량 Q5_0 (`ggml-batisay-ko-base-q5_0.bin`, ~574MB)
+    #[serde(rename = "batisay_ko_base_q5_0")]
+    BatisayKoBaseQ5_0,
 }
 
 impl ModelVariant {
+    pub const ALL: [ModelVariant; 4] = [
+        ModelVariant::Fp16,
+        ModelVariant::Q8_0,
+        ModelVariant::BatisayKoBase,
+        ModelVariant::BatisayKoBaseQ5_0,
+    ];
+
     pub fn filename(&self) -> &'static str {
         match self {
             ModelVariant::Fp16 => "ggml-large-v3-turbo.bin",
             ModelVariant::Q8_0 => "ggml-large-v3-turbo-q8_0.bin",
+            ModelVariant::BatisayKoBase => "ggml-batisay-ko-base.bin",
+            ModelVariant::BatisayKoBaseQ5_0 => "ggml-batisay-ko-base-q5_0.bin",
         }
     }
 
@@ -114,6 +128,8 @@ impl ModelVariant {
         match self {
             ModelVariant::Fp16 => "whisper-large-v3-turbo (FP16 · Metal)",
             ModelVariant::Q8_0 => "whisper-large-v3-turbo (Q8_0 경량 · Metal)",
+            ModelVariant::BatisayKoBase => "batisay-ko-base (표준 · Metal)",
+            ModelVariant::BatisayKoBaseQ5_0 => "batisay-ko-base (Q5_0 경량 · Metal)",
         }
     }
 
@@ -125,6 +141,12 @@ impl ModelVariant {
             ModelVariant::Q8_0 => {
                 "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin"
             }
+            ModelVariant::BatisayKoBase => {
+                "https://huggingface.co/batiai/batisay-ko-base/resolve/main/ggml-batisay-ko-base.bin"
+            }
+            ModelVariant::BatisayKoBaseQ5_0 => {
+                "https://huggingface.co/batiai/batisay-ko-base/resolve/main/ggml-batisay-ko-base-q5_0.bin"
+            }
         }
     }
 
@@ -132,6 +154,8 @@ impl ModelVariant {
         match self {
             ModelVariant::Fp16 => 1_500_000_000,
             ModelVariant::Q8_0 => 800_000_000,
+            ModelVariant::BatisayKoBase => 1_500_000_000,
+            ModelVariant::BatisayKoBaseQ5_0 => 500_000_000,
         }
     }
 
@@ -139,6 +163,8 @@ impl ModelVariant {
         match self {
             ModelVariant::Fp16 => "~1.62GB",
             ModelVariant::Q8_0 => "~874MB",
+            ModelVariant::BatisayKoBase => "~1.62GB",
+            ModelVariant::BatisayKoBaseQ5_0 => "~574MB",
         }
     }
 }
@@ -462,14 +488,19 @@ pub fn is_newer_semver(current: &str, candidate: &str) -> bool {
     }
 }
 
+/// 개별 모델 사양별 디스크 보관 상태
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VariantStorageInfo {
+    pub variant: ModelVariant,
+    pub installed: bool,
+    pub bytes: u64,
+}
+
 /// 로컬 디스크에 보관 중인 음성 인식 모델 용량·설치 정보
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelStorageInfo {
     pub models_dir: String,
-    pub fp16_installed: bool,
-    pub fp16_bytes: u64,
-    pub q8_0_installed: bool,
-    pub q8_0_bytes: u64,
+    pub variants: Vec<VariantStorageInfo>,
     pub total_bytes: u64,
 }
 
@@ -479,7 +510,22 @@ pub struct ModelStorageInfo {
 pub enum ModelDeleteTarget {
     Fp16,
     Q8_0,
+    BatisayKoBase,
+    #[serde(rename = "batisay_ko_base_q5_0")]
+    BatisayKoBaseQ5_0,
     All,
+}
+
+impl ModelDeleteTarget {
+    pub fn as_variant(&self) -> Option<ModelVariant> {
+        match self {
+            ModelDeleteTarget::Fp16 => Some(ModelVariant::Fp16),
+            ModelDeleteTarget::Q8_0 => Some(ModelVariant::Q8_0),
+            ModelDeleteTarget::BatisayKoBase => Some(ModelVariant::BatisayKoBase),
+            ModelDeleteTarget::BatisayKoBaseQ5_0 => Some(ModelVariant::BatisayKoBaseQ5_0),
+            ModelDeleteTarget::All => None,
+        }
+    }
 }
 
 /// 모델 디렉터리의 실제 파일 크기를 조사합니다.
@@ -490,10 +536,19 @@ pub fn inspect_models_dir(models_dir: &Path) -> ModelStorageInfo {
             .unwrap_or(0)
     };
 
-    let fp16_main = file_len(ModelVariant::Fp16.filename());
-    let fp16_part = file_len(&format!("{}.part", ModelVariant::Fp16.filename()));
-    let q8_main = file_len(ModelVariant::Q8_0.filename());
-    let q8_part = file_len(&format!("{}.part", ModelVariant::Q8_0.filename()));
+    let variants = ModelVariant::ALL
+        .iter()
+        .copied()
+        .map(|variant| {
+            let main = file_len(variant.filename());
+            let part = file_len(&format!("{}.part", variant.filename()));
+            VariantStorageInfo {
+                variant,
+                installed: main >= variant.min_valid_bytes(),
+                bytes: main.saturating_add(part),
+            }
+        })
+        .collect();
 
     let mut total_bytes = 0_u64;
     if let Ok(entries) = fs::read_dir(models_dir) {
@@ -508,10 +563,7 @@ pub fn inspect_models_dir(models_dir: &Path) -> ModelStorageInfo {
 
     ModelStorageInfo {
         models_dir: models_dir.to_string_lossy().into_owned(),
-        fp16_installed: fp16_main >= ModelVariant::Fp16.min_valid_bytes(),
-        fp16_bytes: fp16_main.saturating_add(fp16_part),
-        q8_0_installed: q8_main >= ModelVariant::Q8_0.min_valid_bytes(),
-        q8_0_bytes: q8_main.saturating_add(q8_part),
+        variants,
         total_bytes,
     }
 }
@@ -530,8 +582,8 @@ pub fn delete_models_in_dir(models_dir: &Path, target: ModelDeleteTarget) -> Res
         Ok(())
     };
 
-    match target {
-        ModelDeleteTarget::All => {
+    match target.as_variant() {
+        None => {
             for entry in fs::read_dir(models_dir)
                 .with_context(|| format!("모델 폴더 조회 실패: {}", models_dir.display()))?
             {
@@ -541,19 +593,15 @@ pub fn delete_models_in_dir(models_dir: &Path, target: ModelDeleteTarget) -> Res
                 }
             }
         }
-        ModelDeleteTarget::Fp16 => {
-            remove_if_exists(models_dir.join(ModelVariant::Fp16.filename()))?;
-            remove_if_exists(models_dir.join(format!("{}.part", ModelVariant::Fp16.filename())))?;
-        }
-        ModelDeleteTarget::Q8_0 => {
-            remove_if_exists(models_dir.join(ModelVariant::Q8_0.filename()))?;
-            remove_if_exists(models_dir.join(format!("{}.part", ModelVariant::Q8_0.filename())))?;
+        Some(variant) => {
+            remove_if_exists(models_dir.join(variant.filename()))?;
+            remove_if_exists(models_dir.join(format!("{}.part", variant.filename())))?;
         }
     }
 
-    // 두 Whisper 모델이 모두 없어졌다면 공용 보조 파일(VAD·토크나이저·임시 조각)도 함께 정리
+    // 모든 Whisper 모델이 없어졌다면 공용 보조 파일(VAD·토크나이저·임시 조각)도 함께 정리
     let after = inspect_models_dir(models_dir);
-    if after.fp16_bytes == 0 && after.q8_0_bytes == 0 && after.total_bytes > 0 {
+    if after.variants.iter().all(|v| v.bytes == 0) && after.total_bytes > 0 {
         for entry in fs::read_dir(models_dir)? {
             let entry = entry?;
             if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
@@ -658,7 +706,7 @@ mod tests {
     }
 
     #[test]
-    fn test_model_variant_default_and_q8_0_metadata() {
+    fn test_model_variant_default_and_metadata() {
         let cfg = AppConfig::default();
         assert_eq!(cfg.model_variant, ModelVariant::Fp16);
         assert_eq!(ModelVariant::Fp16.filename(), "ggml-large-v3-turbo.bin");
@@ -667,6 +715,29 @@ mod tests {
             "ggml-large-v3-turbo-q8_0.bin"
         );
         assert_eq!(ModelVariant::Q8_0.size_label(), "~874MB");
+
+        assert_eq!(
+            ModelVariant::BatisayKoBase.filename(),
+            "ggml-batisay-ko-base.bin"
+        );
+        assert_eq!(ModelVariant::BatisayKoBase.size_label(), "~1.62GB");
+        assert_eq!(
+            ModelVariant::BatisayKoBase.download_url(),
+            "https://huggingface.co/batiai/batisay-ko-base/resolve/main/ggml-batisay-ko-base.bin"
+        );
+        assert_eq!(
+            ModelVariant::BatisayKoBaseQ5_0.filename(),
+            "ggml-batisay-ko-base-q5_0.bin"
+        );
+        assert_eq!(ModelVariant::BatisayKoBaseQ5_0.size_label(), "~574MB");
+        assert_eq!(
+            serde_json::to_string(&ModelVariant::BatisayKoBase).unwrap(),
+            "\"batisay_ko_base\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ModelVariant::BatisayKoBaseQ5_0).unwrap(),
+            "\"batisay_ko_base_q5_0\""
+        );
     }
 
     #[test]
@@ -755,15 +826,42 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
 
         fs::write(dir.join(ModelVariant::Fp16.filename()), vec![1u8; 1024]).unwrap();
+        fs::write(
+            dir.join(ModelVariant::BatisayKoBaseQ5_0.filename()),
+            vec![3u8; 2048],
+        )
+        .unwrap();
         fs::write(dir.join("silero_vad_v6.onnx"), vec![2u8; 512]).unwrap();
 
         let info = inspect_models_dir(&dir);
-        assert_eq!(info.fp16_bytes, 1024);
-        assert_eq!(info.total_bytes, 1536);
+        let fp16_info = info
+            .variants
+            .iter()
+            .find(|v| v.variant == ModelVariant::Fp16)
+            .unwrap();
+        let batisay_q5_info = info
+            .variants
+            .iter()
+            .find(|v| v.variant == ModelVariant::BatisayKoBaseQ5_0)
+            .unwrap();
+        assert_eq!(fp16_info.bytes, 1024);
+        assert_eq!(batisay_q5_info.bytes, 2048);
+        assert_eq!(info.total_bytes, 3584);
 
         delete_models_in_dir(&dir, ModelDeleteTarget::Fp16).unwrap();
-        let after = inspect_models_dir(&dir);
-        assert_eq!(after.total_bytes, 0);
+        let after_one = inspect_models_dir(&dir);
+        let fp16_after = after_one
+            .variants
+            .iter()
+            .find(|v| v.variant == ModelVariant::Fp16)
+            .unwrap();
+        assert_eq!(fp16_after.bytes, 0);
+        // 다른 모델이 남아있으면 공용 VAD 파일은 보존
+        assert_eq!(after_one.total_bytes, 2560);
+
+        delete_models_in_dir(&dir, ModelDeleteTarget::BatisayKoBaseQ5_0).unwrap();
+        let after_all = inspect_models_dir(&dir);
+        assert_eq!(after_all.total_bytes, 0);
 
         let _ = fs::remove_dir_all(&dir);
     }

@@ -23,16 +23,20 @@ export interface ShortcutConfig {
   hold_ms: number;
 }
 
-export type ModelVariant = "fp16" | "q8_0";
+export type ModelVariant =
+  "fp16" | "q8_0" | "batisay_ko_base" | "batisay_ko_base_q5_0";
 
-export type ModelDeleteTarget = "fp16" | "q8_0" | "all";
+export type ModelDeleteTarget = ModelVariant | "all";
+
+export interface VariantStorageInfo {
+  variant: ModelVariant;
+  installed: boolean;
+  bytes: number;
+}
 
 export interface ModelStorageInfo {
   models_dir: string;
-  fp16_installed: boolean;
-  fp16_bytes: number;
-  q8_0_installed: boolean;
-  q8_0_bytes: number;
+  variants: VariantStorageInfo[];
   total_bytes: number;
 }
 

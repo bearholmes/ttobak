@@ -27,6 +27,15 @@ export const OPEN_SOURCE_CATEGORIES: OpenSourceCategory[] = [
         repoUrl: "https://github.com/openai/whisper",
       },
       {
+        name: "batiai / batisay-ko-base",
+        version: "Whisper large-v3-turbo 한국어 파인튜닝",
+        license: "Apache-2.0",
+        spdxUrl: "https://spdx.org/licenses/Apache-2.0.html",
+        copyright: "batiai",
+        role: "한국어 음성 인식에 최적화된 선택형 Whisper 파인튜닝 모델 (FP16 / Q5_0)",
+        repoUrl: "https://huggingface.co/batiai/batisay-ko-base",
+      },
+      {
         name: "whisper.cpp & ggml",
         version: "1.7+",
         license: "MIT",

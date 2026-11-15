@@ -38,10 +38,12 @@ const FALLBACK_SNAPSHOT: AppSnapshot = {
   },
   model_storage: {
     models_dir: "~/Library/Application Support/com.ttobak.app/SpeechModels",
-    fp16_installed: true,
-    fp16_bytes: 1624555275,
-    q8_0_installed: false,
-    q8_0_bytes: 0,
+    variants: [
+      { variant: "fp16", installed: true, bytes: 1624555275 },
+      { variant: "q8_0", installed: false, bytes: 0 },
+      { variant: "batisay_ko_base", installed: false, bytes: 0 },
+      { variant: "batisay_ko_base_q5_0", installed: false, bytes: 0 },
+    ],
     total_bytes: 1628200000,
   },
   app_update: {
