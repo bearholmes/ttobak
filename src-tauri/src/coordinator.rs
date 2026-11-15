@@ -381,9 +381,13 @@ impl SessionCoordinator {
             }
             Err(err) => {
                 warn!("앱 업데이트 확인 실패: {:#}", err);
-                AppUpdateState::Error {
-                    message: format!("업데이트 확인에 실패했어요: {}", err),
-                }
+                let raw = err.to_string();
+                let message = if raw.contains("GitHub API 요청 한도") {
+                    raw
+                } else {
+                    "업데이트 확인에 실패했습니다. 잠시 후 다시 시도해주세요.".to_string()
+                };
+                AppUpdateState::Error { message }
             }
         };
 

@@ -344,7 +344,30 @@ fn select_macos_asset_url(assets: &[GitHubReleaseAsset], arch: &str) -> Option<S
         .or_else(|| pick_by_extensions(&[".pkg", ".app.tar.gz", ".zip"]))
 }
 
-/// 릴리즈 노트 본문에서 UI 한 줄 요약용 텍스트를 추출합니다.
+/// 마크다운 링크 `[텍스트](URL)`에서 표시 텍스트만 남깁니다.
+fn strip_markdown_links(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut rest = input;
+    while let Some(open_bracket) = rest.find('[') {
+        out.push_str(&rest[..open_bracket]);
+        let after_bracket = &rest[open_bracket + 1..];
+        if let Some(close_bracket) = after_bracket.find("](") {
+            let label = &after_bracket[..close_bracket];
+            let after_paren = &after_bracket[close_bracket + 2..];
+            if let Some(close_paren) = after_paren.find(')') {
+                out.push_str(label);
+                rest = &after_paren[close_paren + 1..];
+                continue;
+            }
+        }
+        out.push('[');
+        rest = after_bracket;
+    }
+    out.push_str(rest);
+    out
+}
+
+/// 릴리즈 노트 본문에서 URL·보일러플레이트를 제외한 짧은 한 줄 요약을 추출합니다.
 pub fn summarize_release_notes(raw: &str) -> Option<String> {
     for line in raw.lines() {
         let trimmed = line
@@ -356,12 +379,45 @@ pub fn summarize_release_notes(raw: &str) -> Option<String> {
         {
             continue;
         }
-        let max_chars = 100;
-        let summary = if trimmed.chars().count() > max_chars {
-            let prefix: String = trimmed.chars().take(max_chars).collect();
+
+        let unlinked = strip_markdown_links(trimmed);
+        let cleaned_tokens: Vec<&str> = unlinked
+            .split_whitespace()
+            .filter(|tok| {
+                let t = tok.trim_matches(|c: char| matches!(c, '(' | ')' | '<' | '>' | ',' | ';'));
+                !t.starts_with("http://") && !t.starts_with("https://")
+            })
+            .collect();
+        let joined = cleaned_tokens
+            .join(" ")
+            .replace("**", "")
+            .replace("__", "")
+            .replace('`', "");
+        let mut normalized = joined.trim().to_string();
+
+        // GitHub 자동 생성 릴리즈 노트의 "by @author in" 꼬리표 제거
+        if let Some(idx) = normalized.rfind(" by @") {
+            normalized.truncate(idx);
+        }
+        let normalized = normalized.trim().trim_end_matches(':').trim();
+        if normalized.is_empty() {
+            continue;
+        }
+
+        let lower = normalized.to_ascii_lowercase();
+        if lower == "what's changed"
+            || lower.starts_with("full changelog")
+            || lower.starts_with("new contributors")
+        {
+            continue;
+        }
+
+        let max_chars = 40;
+        let summary = if normalized.chars().count() > max_chars {
+            let prefix: String = normalized.chars().take(max_chars).collect();
             format!("{}…", prefix.trim_end())
         } else {
-            trimmed.to_string()
+            normalized.to_string()
         };
         return Some(summary);
     }
@@ -670,6 +726,23 @@ mod tests {
             "https://github.com/bearholmes/ttobak/releases/tag/v0.3.1"
         );
         assert_eq!(parsed_fallback.release_notes, None);
+    }
+
+    #[test]
+    fn test_summarize_release_notes_strips_urls_and_boilerplate() {
+        assert_eq!(
+            summarize_release_notes(
+                "**Full Changelog**: https://github.com/bearholmes/ttobak/compare/v0.9.0...v0.9.1"
+            ),
+            None
+        );
+        assert_eq!(
+            summarize_release_notes(
+                "## What's Changed\n* 보조 모니터 HUD 위치 개선 by @bearholmes in https://github.com/bearholmes/ttobak/pull/12\n\n**Full Changelog**: https://github.com/bearholmes/ttobak/compare/v0.9.0...v0.9.1"
+            )
+            .as_deref(),
+            Some("보조 모니터 HUD 위치 개선")
+        );
     }
 
     #[test]

@@ -348,9 +348,7 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
       case "up_to_date":
         return "최신 버전입니다.";
       case "available":
-        return appUpdate.release_notes
-          ? `v${appUpdate.latest_version} 출시 · ${appUpdate.release_notes}`
-          : `새 버전(v${appUpdate.latest_version}) 업데이트 가능`;
+        return "새 버전 업데이트 가능";
       case "applying":
         return `v${appUpdate.latest_version} 설치 파일 다운로드 및 여는 중...`;
       case "error":
