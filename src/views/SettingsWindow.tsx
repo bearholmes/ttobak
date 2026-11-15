@@ -216,7 +216,10 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
   );
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<ModelDeleteTarget>("all");
+  const [deleteModalScope, setDeleteModalScope] = useState<
+    "selected" | "other"
+  >("selected");
+  const [deleteTarget, setDeleteTarget] = useState<ModelDeleteTarget>("fp16");
   const [deletingModel, setDeletingModel] = useState(false);
 
   useEffect(() => {
@@ -369,9 +372,22 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
   const currentVariant: ModelVariant = snapshot.config.model_variant ?? "fp16";
   const currentVariantMeta = getModelVariantOption(currentVariant);
   const variantSizeLabel = currentVariantMeta.sizeLabel;
+  const variantStorageMap = new Map(
+    (storage.variants ?? []).map((item) => [item.variant, item]),
+  );
   const variantsOnDisk = (storage.variants ?? []).filter((v) => v.bytes > 0);
-  const hasMultipleVariantsOnDisk = variantsOnDisk.length > 1;
-  const hasAnyModelFiles = storage.total_bytes > 0;
+  const currentVariantBytes = variantStorageMap.get(currentVariant)?.bytes ?? 0;
+  const currentVariantReclaimBytes =
+    variantsOnDisk.length <= 1 && currentVariantBytes > 0
+      ? storage.total_bytes
+      : currentVariantBytes;
+  const otherVariantsOnDisk = variantsOnDisk.filter(
+    (v) => v.variant !== currentVariant,
+  );
+  const otherVariantsBytes = otherVariantsOnDisk.reduce(
+    (sum, item) => sum + item.bytes,
+    0,
+  );
   const isModelBusy =
     readiness.state === "downloading" ||
     readiness.state === "loading" ||
@@ -381,8 +397,20 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
   const isUpdateBusy =
     appUpdate.status === "checking" || appUpdate.status === "applying";
 
-  const openDeleteModelModal = () => {
-    setDeleteTarget("all");
+  const openDeleteSelectedModal = () => {
+    setDeleteModalScope("selected");
+    setDeleteTarget(currentVariant);
+    setDeleteModalOpen(true);
+  };
+
+  const openDeleteOtherModal = () => {
+    if (otherVariantsOnDisk.length === 0) return;
+    setDeleteModalScope("other");
+    setDeleteTarget(
+      otherVariantsOnDisk.length > 1 && currentVariantBytes === 0
+        ? "all"
+        : otherVariantsOnDisk[0].variant,
+    );
     setDeleteModalOpen(true);
   };
 
@@ -679,14 +707,26 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
             <div className="section-block">
               <div className="section-label">음성 엔진</div>
               <div className="setting-group">
-                <div className="setting-row">
-                  <div className="setting-left">
-                    <div>
-                      <div className="row-title">음성 모델</div>
-                      <div className="row-desc">{currentVariantMeta.desc}</div>
+                <div className="setting-row model-row">
+                  <div className="model-row-top">
+                    <div className="row-title-inline">
+                      <span className="row-title">음성 모델</span>
+                      {readiness.state === "ready" ? (
+                        <span className="inline-state-badge ok">
+                          <span className="status-dot ok" /> 준비됨
+                        </span>
+                      ) : readiness.state === "downloading" ||
+                        readiness.state === "loading" ? (
+                        <span className="inline-state-badge busy">
+                          <Loader2 size={11.5} className="spin" />{" "}
+                          {readiness.state === "downloading"
+                            ? `다운로드 ${Math.round(readiness.progress * 100)}%`
+                            : "엔진 불러오는 중"}
+                        </span>
+                      ) : (
+                        <span className="inline-state-badge">미설치</span>
+                      )}
                     </div>
-                  </div>
-                  <div className="setting-right">
                     <div className="model-select-wrap">
                       <select
                         className="model-select"
@@ -703,11 +743,18 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                           <optgroup key={group} label={group}>
                             {MODEL_VARIANT_OPTIONS.filter(
                               (opt) => opt.group === group,
-                            ).map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.optionLabel}
-                              </option>
-                            ))}
+                            ).map((opt) => {
+                              const installed =
+                                variantStorageMap.get(opt.value)?.installed ??
+                                false;
+                              return (
+                                <option key={opt.value} value={opt.value}>
+                                  {installed
+                                    ? `✓ ${opt.optionLabel}`
+                                    : opt.optionLabel}
+                                </option>
+                              );
+                            })}
                           </optgroup>
                         ))}
                       </select>
@@ -718,106 +765,109 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                       />
                     </div>
                   </div>
-                </div>
 
-                <div className="setting-row">
-                  <div className="setting-left grow">
-                    <div className="setting-left-body">
-                      <div className="row-title">온디바이스 모델</div>
-                      <div className="row-desc">
-                        {readiness.state === "ready"
-                          ? `${readiness.model_name} · ${formatBytes(
-                              storage.total_bytes,
-                            )}${
-                              hasMultipleVariantsOnDisk
-                                ? ` (${variantsOnDisk.length}개 모델 보관됨)`
-                                : ""
-                            }`
-                          : readiness.state === "downloading"
+                  <div className="model-row-bottom">
+                    <div className="setting-left grow">
+                      <div className="setting-left-body">
+                        <div className="row-desc">
+                          {readiness.state === "downloading"
                             ? `${readiness.stage} · ${formatBytes(
                                 readiness.downloaded_bytes,
-                              )} / ${formatBytes(
-                                readiness.total_bytes,
-                              )} (${Math.round(readiness.progress * 100)}%)`
+                              )} / ${formatBytes(readiness.total_bytes)}`
                             : readiness.state === "loading"
                               ? "Metal 엔진 불러오는 중..."
-                              : `미설치${
-                                  hasAnyModelFiles
-                                    ? ` · 기타 ${formatBytes(
-                                        storage.total_bytes,
-                                      )} 보관 중`
-                                    : ""
-                                }`}
+                              : readiness.state === "ready" &&
+                                  currentVariantBytes > 0
+                                ? `${currentVariantMeta.desc} · ${formatBytes(
+                                    currentVariantBytes,
+                                  )}`
+                                : currentVariantMeta.desc}
+                        </div>
+                        {readiness.state === "downloading" && (
+                          <div className="progress-track inline-model-progress">
+                            <div
+                              className="progress-fill"
+                              style={{
+                                width: `${Math.max(
+                                  2,
+                                  Math.round(readiness.progress * 100),
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                        )}
+                        {readiness.state === "error" && (
+                          <div className="row-desc error-text">
+                            {readiness.message}
+                          </div>
+                        )}
                       </div>
-                      {readiness.state === "downloading" && (
-                        <div className="progress-track inline-model-progress">
-                          <div
-                            className="progress-fill"
-                            style={{
-                              width: `${Math.max(
-                                2,
-                                Math.round(readiness.progress * 100),
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                      )}
-                      {readiness.state === "error" && (
-                        <div className="row-desc error-text">
-                          {readiness.message}
-                        </div>
-                      )}
                     </div>
-                  </div>
-                  <div className="setting-right">
-                    {readiness.state === "ready" ? (
-                      <>
-                        <span className="inline-state-badge ok">
-                          <span className="status-dot ok" /> 준비됨
-                        </span>
+
+                    <div className="setting-right">
+                      {readiness.state === "ready" ? (
                         <button
                           type="button"
                           className="soft-danger-btn"
                           disabled={isModelBusy}
-                          onClick={openDeleteModelModal}
+                          onClick={openDeleteSelectedModal}
                         >
                           <Trash2 size={12} />
                           <span>삭제</span>
                         </button>
-                      </>
-                    ) : readiness.state === "downloading" ||
-                      readiness.state === "loading" ? (
-                      <span className="inline-state-badge busy">
-                        <Loader2 size={12} className="spin" />{" "}
-                        {readiness.state === "downloading"
-                          ? `${Math.round(readiness.progress * 100)}%`
-                          : "준비 중"}
-                      </span>
-                    ) : (
-                      <>
-                        {hasAnyModelFiles && (
-                          <button
-                            type="button"
-                            className="soft-danger-btn"
-                            disabled={isModelBusy}
-                            onClick={openDeleteModelModal}
-                          >
-                            <Trash2 size={12} />
-                            <span>삭제</span>
-                          </button>
-                        )}
+                      ) : readiness.state !== "downloading" &&
+                        readiness.state !== "loading" ? (
                         <button
                           type="button"
                           className="primary-btn"
+                          disabled={isModelBusy}
                           onClick={() => void ttobakApi.downloadModels()}
                         >
                           <Download size={12.5} />
                           <span>다운로드 ({variantSizeLabel})</span>
                         </button>
-                      </>
-                    )}
+                      ) : null}
+                    </div>
                   </div>
                 </div>
+
+                {otherVariantsOnDisk.length > 0 && (
+                  <div className="setting-row">
+                    <div className="setting-left grow">
+                      <div className="setting-left-body">
+                        <div className="row-title">보관 중인 다른 모델</div>
+                        <div className="row-desc">
+                          {otherVariantsOnDisk.length === 1
+                            ? `${
+                                getModelVariantOption(
+                                  otherVariantsOnDisk[0].variant,
+                                ).shortLabel
+                              } · ${formatBytes(otherVariantsOnDisk[0].bytes)}`
+                            : `${
+                                getModelVariantOption(
+                                  otherVariantsOnDisk[0].variant,
+                                ).shortLabel
+                              } 외 ${otherVariantsOnDisk.length - 1}개 · ${formatBytes(
+                                otherVariantsBytes,
+                              )}`}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="setting-right">
+                      <button
+                        type="button"
+                        className="soft-danger-btn"
+                        disabled={isModelBusy}
+                        onClick={openDeleteOtherModal}
+                      >
+                        <Trash2 size={12} />
+                        <span>
+                          {otherVariantsOnDisk.length > 1 ? "정리..." : "삭제"}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1280,17 +1330,22 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
           }}
         >
           <div className="modal-panel">
-            <h3>음성 인식 모델 삭제</h3>
+            <h3>
+              {deleteModalScope === "selected"
+                ? `${currentVariantMeta.shortLabel} 삭제`
+                : "보관 중인 다른 모델 삭제"}
+            </h3>
             <p className="modal-desc">
-              로컬 모델 파일을 삭제해 저장 공간을 확보합니다. 다시 사용하려면
-              새로 다운로드해야 합니다.
+              {deleteModalScope === "selected"
+                ? "선택한 모델 파일을 삭제해 저장 공간을 확보합니다. 다시 사용하려면 새로 다운로드해야 합니다."
+                : "현재 선택되지 않은 모델 파일을 삭제해 저장 공간을 확보합니다."}
             </p>
 
-            {hasMultipleVariantsOnDisk && (
+            {deleteModalScope === "other" && otherVariantsOnDisk.length > 1 && (
               <div>
                 <div className="hold-title">삭제 대상</div>
                 <div className="delete-target-buttons">
-                  {variantsOnDisk.map((item) => (
+                  {otherVariantsOnDisk.map((item) => (
                     <button
                       key={item.variant}
                       type="button"
@@ -1303,15 +1358,17 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                       {formatBytes(item.bytes)})
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    className={`hold-btn ${
-                      deleteTarget === "all" ? "selected" : ""
-                    }`}
-                    onClick={() => setDeleteTarget("all")}
-                  >
-                    전체 ({formatBytes(storage.total_bytes)})
-                  </button>
+                  {currentVariantBytes === 0 && (
+                    <button
+                      type="button"
+                      className={`hold-btn ${
+                        deleteTarget === "all" ? "selected" : ""
+                      }`}
+                      onClick={() => setDeleteTarget("all")}
+                    >
+                      전체 ({formatBytes(storage.total_bytes)})
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -1320,12 +1377,15 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
               <div className="model-storage-meta">
                 <span className="model-storage-label">확보 용량</span>
                 <strong className="model-storage-size">
-                  {deleteTarget === "all"
-                    ? formatBytes(storage.total_bytes)
-                    : formatBytes(
-                        variantsOnDisk.find((v) => v.variant === deleteTarget)
-                          ?.bytes ?? 0,
-                      )}
+                  {deleteModalScope === "selected"
+                    ? formatBytes(currentVariantReclaimBytes)
+                    : deleteTarget === "all"
+                      ? formatBytes(storage.total_bytes)
+                      : formatBytes(
+                          otherVariantsOnDisk.find(
+                            (v) => v.variant === deleteTarget,
+                          )?.bytes ?? 0,
+                        )}
                 </strong>
               </div>
               <div className="model-storage-path-row">
