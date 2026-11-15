@@ -1,7 +1,7 @@
 {
   "name": "ttobak",
   "private": true,
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "또박 (Ttobak) — macOS 온디바이스 음성 받아쓰기 메뉴 막대 앱",
   "type": "module",
   "scripts": {

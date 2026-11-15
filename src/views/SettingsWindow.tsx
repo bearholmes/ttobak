@@ -407,7 +407,7 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
       case "available":
         return "새 버전 업데이트 가능";
       case "applying":
-        return `v${appUpdate.latest_version} 설치 파일 다운로드 및 여는 중...`;
+        return `v${appUpdate.latest_version} 다운로드 및 자동 업데이트 중...`;
       case "error":
         return appUpdate.message;
     }
@@ -877,7 +877,7 @@ export const SettingsWindow: React.FC<Props> = ({ snapshot }) => {
                         {appUpdate.status === "checking"
                           ? "확인 중..."
                           : appUpdate.status === "applying"
-                            ? "준비 중..."
+                            ? "업데이트 중..."
                             : "업데이트 확인"}
                       </button>
                     )}
