@@ -1,6 +1,7 @@
 use objc2::msg_send;
 use objc2::runtime::{AnyClass, AnyObject};
-use objc2_app_kit::NSWorkspace;
+use objc2_app_kit::{NSEvent, NSScreen, NSWorkspace};
+use objc2_foundation::MainThreadMarker;
 use std::ffi::c_void;
 use std::ptr;
 
@@ -149,5 +150,123 @@ pub fn restore_external_app_focus_if_needed(saved_pid: Option<i32>) -> bool {
         let options: usize = 2;
         let ok: bool = msg_send![running_app, activateWithOptions: options];
         ok
+    }
+}
+
+/// Cocoa 좌표계(`(x, y, width, height)`, 주 모니터 좌하단 원점) 사각형을 기준으로
+/// 포커스 좌표(Quartz 좌상단 원점) 또는 마우스 좌표(Cocoa 좌하단 원점)가 속한 모니터를 선택해
+/// HUD 창의 Quartz 좌상단 원점 논리 좌표를 계산합니다.
+pub fn compute_hud_origin_quartz(
+    screens_cocoa: &[(f64, f64, f64, f64)],
+    focus_point_quartz: Option<(f64, f64)>,
+    mouse_point_cocoa: Option<(f64, f64)>,
+    hud_width: f64,
+    hud_height: f64,
+    bottom_margin: f64,
+) -> Option<(f64, f64)> {
+    let primary = *screens_cocoa.first()?;
+    let primary_height = primary.3;
+
+    let contains_cocoa = |rect: (f64, f64, f64, f64), pt: (f64, f64)| -> bool {
+        pt.0 >= rect.0 && pt.0 < rect.0 + rect.2 && pt.1 >= rect.1 && pt.1 < rect.1 + rect.3
+    };
+
+    let selected = focus_point_quartz
+        .and_then(|(qx, qy)| {
+            let cocoa_pt = (qx, primary_height - qy);
+            screens_cocoa
+                .iter()
+                .copied()
+                .find(|&rect| contains_cocoa(rect, cocoa_pt))
+        })
+        .or_else(|| {
+            mouse_point_cocoa.and_then(|cocoa_pt| {
+                screens_cocoa
+                    .iter()
+                    .copied()
+                    .find(|&rect| contains_cocoa(rect, cocoa_pt))
+            })
+        })
+        .unwrap_or(primary);
+
+    let quartz_left = selected.0;
+    let quartz_top = primary_height - (selected.1 + selected.3);
+    let x = quartz_left + (selected.2 - hud_width) / 2.0;
+    let y = quartz_top + selected.3 - hud_height - bottom_margin;
+    Some((x, y))
+}
+
+/// 현재 포커스된 입력창(1순위) 또는 마우스 커서(2순위)가 위치한 모니터의 하단 중앙에
+/// HUD 창을 배치할 논리 좌표(`LogicalPosition`)를 반환합니다.
+///
+/// 메인 스레드에서 호출되어야 합니다.
+pub fn hud_origin_for_active_monitor(
+    focus_point_quartz: Option<(f64, f64)>,
+    hud_width: f64,
+    hud_height: f64,
+    bottom_margin: f64,
+) -> Option<(f64, f64)> {
+    let mtm = MainThreadMarker::new()?;
+    let screens = NSScreen::screens(mtm);
+    let rects: Vec<(f64, f64, f64, f64)> = screens
+        .iter()
+        .map(|screen| {
+            let f = screen.frame();
+            (f.origin.x, f.origin.y, f.size.width, f.size.height)
+        })
+        .collect();
+
+    let mouse = NSEvent::mouseLocation();
+    compute_hud_origin_quartz(
+        &rects,
+        focus_point_quartz,
+        Some((mouse.x, mouse.y)),
+        hud_width,
+        hud_height,
+        bottom_margin,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compute_hud_origin_quartz;
+
+    #[test]
+    fn test_compute_hud_origin_selects_secondary_monitor_by_focus_or_mouse() {
+        // 메인 모니터: 1512x982 @ (0, 0)
+        // 오른쪽 보조 모니터: 2560x1440 @ (1512, -229) (Cocoa 좌표)
+        let screens = vec![(0.0, 0.0, 1512.0, 982.0), (1512.0, -229.0, 2560.0, 1440.0)];
+
+        // 1) 포커스 좌표가 보조 모니터(Quartz x=2000, y=300 -> Cocoa y=982-300=682)에 있을 때
+        let pos_focus = compute_hud_origin_quartz(
+            &screens,
+            Some((2000.0, 300.0)),
+            Some((200.0, 200.0)), // 마우스는 메인 모니터에 있어도 포커스 우선
+            430.0,
+            200.0,
+            96.0,
+        )
+        .unwrap();
+        // 보조 모니터 Quartz top = 982 - (-229 + 1440) = -229
+        // x = 1512 + (2560 - 430)/2 = 2577
+        // y = -229 + 1440 - 200 - 96 = 915
+        assert_eq!(pos_focus, (2577.0, 915.0));
+
+        // 2) 포커스 좌표가 없고 마우스 커서가 보조 모니터에 있을 때
+        let pos_mouse = compute_hud_origin_quartz(
+            &screens,
+            None,
+            Some((2100.0, 500.0)),
+            430.0,
+            200.0,
+            96.0,
+        )
+        .unwrap();
+        assert_eq!(pos_mouse, (2577.0, 915.0));
+
+        // 3) 둘 다 메인 모니터 또는 범위 밖이면 메인 모니터로 폴백
+        let pos_main =
+            compute_hud_origin_quartz(&screens, None, None, 430.0, 200.0, 96.0).unwrap();
+        assert_eq!(pos_main, ((1512.0 - 430.0) / 2.0, 982.0 - 200.0 - 96.0));
     }
 }

@@ -6,8 +6,25 @@ use std::ffi::c_void;
 use std::ptr;
 
 type AXUIElementRef = *mut c_void;
+type AXValueRef = *mut c_void;
 type AXError = i32;
 const K_AX_ERROR_SUCCESS: AXError = 0;
+const K_AX_VALUE_CG_POINT_TYPE: u32 = 1;
+const K_AX_VALUE_CG_SIZE_TYPE: u32 = 2;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+struct AxCGPoint {
+    x: f64,
+    y: f64,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+struct AxCGSize {
+    width: f64,
+    height: f64,
+}
 
 #[link(name = "Carbon", kind = "framework")]
 extern "C" {
@@ -34,6 +51,7 @@ extern "C" {
         attribute: CFStringRef,
         settable: *mut u8,
     ) -> AXError;
+    fn AXValueGetValue(value: AXValueRef, value_type: u32, value_ptr: *mut c_void) -> bool;
 }
 
 /// AX 트리상 일반 텍스트 필드를 노출하지 않지만 항상 키 입력을 받는 터미널 앱 번들 ID 목록
@@ -259,4 +277,121 @@ fn is_ax_element_editable(elem: AXUIElementRef, role: &str) -> bool {
     }
 
     false
+}
+
+/// 현재 키보드 포커스가 놓인 UI 요소 또는 포커스된 윈도우의 중심 좌표(Quartz 전역 논리 좌표)를 반환합니다.
+pub fn focused_target_screen_point() -> Option<(f64, f64)> {
+    if !unsafe { AXIsProcessTrusted() } {
+        return None;
+    }
+
+    let sys_wide = unsafe { AXUIElementCreateSystemWide() };
+    if !sys_wide.is_null() {
+        let focused_attr = CFString::new("AXFocusedUIElement");
+        let mut focused_ref: CFTypeRef = ptr::null();
+        let err = unsafe {
+            AXUIElementCopyAttributeValue(
+                sys_wide,
+                focused_attr.as_concrete_TypeRef(),
+                &mut focused_ref,
+            )
+        };
+        unsafe { CFRelease(sys_wide as CFTypeRef) };
+
+        if err == K_AX_ERROR_SUCCESS && !focused_ref.is_null() {
+            let center = ax_element_center_point(focused_ref as AXUIElementRef);
+            unsafe { CFRelease(focused_ref) };
+            if center.is_some() {
+                return center;
+            }
+        }
+    }
+
+    let (front_pid, _) = frontmost_app_info();
+    let pid = front_pid?;
+    let app_elem = unsafe { AXUIElementCreateApplication(pid) };
+    if app_elem.is_null() {
+        return None;
+    }
+
+    let win_attr = CFString::new("AXFocusedWindow");
+    let mut win_ref: CFTypeRef = ptr::null();
+    let err = unsafe {
+        AXUIElementCopyAttributeValue(app_elem, win_attr.as_concrete_TypeRef(), &mut win_ref)
+    };
+    unsafe { CFRelease(app_elem as CFTypeRef) };
+
+    if err == K_AX_ERROR_SUCCESS && !win_ref.is_null() {
+        let center = ax_element_center_point(win_ref as AXUIElementRef);
+        unsafe { CFRelease(win_ref) };
+        return center;
+    }
+
+    None
+}
+
+fn ax_element_center_point(elem: AXUIElementRef) -> Option<(f64, f64)> {
+    let pos = copy_ax_point_attr(elem, "AXPosition")?;
+    let size = copy_ax_size_attr(elem, "AXSize").unwrap_or_default();
+
+    // (0, 0) 크기의 더미 요소는 무시하고 상위 윈도우 폴백으로 넘김
+    if size.width <= 0.0 && size.height <= 0.0 && pos.x == 0.0 && pos.y == 0.0 {
+        return None;
+    }
+
+    let cx = pos.x + (size.width.max(0.0) / 2.0);
+    let cy = pos.y + (size.height.max(0.0) / 2.0);
+    if cx.is_finite() && cy.is_finite() {
+        Some((cx, cy))
+    } else {
+        None
+    }
+}
+
+fn copy_ax_point_attr(elem: AXUIElementRef, attr_name: &str) -> Option<AxCGPoint> {
+    let attr = CFString::new(attr_name);
+    let mut val_ref: CFTypeRef = ptr::null();
+    let err =
+        unsafe { AXUIElementCopyAttributeValue(elem, attr.as_concrete_TypeRef(), &mut val_ref) };
+    if err != K_AX_ERROR_SUCCESS || val_ref.is_null() {
+        return None;
+    }
+    let mut pt = AxCGPoint::default();
+    let ok = unsafe {
+        AXValueGetValue(
+            val_ref as AXValueRef,
+            K_AX_VALUE_CG_POINT_TYPE,
+            (&mut pt as *mut AxCGPoint).cast(),
+        )
+    };
+    unsafe { CFRelease(val_ref) };
+    if ok {
+        Some(pt)
+    } else {
+        None
+    }
+}
+
+fn copy_ax_size_attr(elem: AXUIElementRef, attr_name: &str) -> Option<AxCGSize> {
+    let attr = CFString::new(attr_name);
+    let mut val_ref: CFTypeRef = ptr::null();
+    let err =
+        unsafe { AXUIElementCopyAttributeValue(elem, attr.as_concrete_TypeRef(), &mut val_ref) };
+    if err != K_AX_ERROR_SUCCESS || val_ref.is_null() {
+        return None;
+    }
+    let mut sz = AxCGSize::default();
+    let ok = unsafe {
+        AXValueGetValue(
+            val_ref as AXValueRef,
+            K_AX_VALUE_CG_SIZE_TYPE,
+            (&mut sz as *mut AxCGSize).cast(),
+        )
+    };
+    unsafe { CFRelease(val_ref) };
+    if ok {
+        Some(sz)
+    } else {
+        None
+    }
 }

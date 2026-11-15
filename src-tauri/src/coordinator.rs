@@ -4,7 +4,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition};
+use tauri::{AppHandle, Emitter, LogicalPosition, Manager, PhysicalPosition};
 use tracing::{error, info, warn};
 use ttobak_audio::{sweep_stale_recordings, ActiveAudioCapture};
 use ttobak_core::{
@@ -21,11 +21,11 @@ use ttobak_macos::{
         open_system_privacy_settings, prompt_accessibility_permission,
         request_microphone_permission, set_launch_at_login,
     },
-    security_focus::{inspect_focused_target, FocusStatus},
+    security_focus::{focused_target_screen_point, inspect_focused_target, FocusStatus},
     window::{
         activate_macos_app, configure_floating_hud_window, current_external_frontmost_pid,
-        hide_hud_without_activating, restore_external_app_focus_if_needed,
-        show_hud_without_activating,
+        hide_hud_without_activating, hud_origin_for_active_monitor,
+        restore_external_app_focus_if_needed, show_hud_without_activating,
     },
 };
 use ttobak_stt::{
@@ -1110,21 +1110,24 @@ fn position_and_style_hud(app: &AppHandle, ignores_mouse: bool) {
         return;
     };
 
-    if let Ok(Some(monitor)) = hud.primary_monitor() {
-        let m_size = monitor.size();
-        let m_pos = monitor.position();
-        let scale = monitor.scale_factor();
-        let win_w = (430.0 * scale) as i32;
-        let win_h = (200.0 * scale) as i32;
-        let x = m_pos.x + (m_size.width as i32 - win_w) / 2;
-        let y = m_pos.y + (m_size.height as i32) - win_h - (96.0 * scale) as i32;
-        let _ = hud.set_position(PhysicalPosition::new(x, y));
-    }
-
+    let focus_point = focused_target_screen_point();
     let _ = hud.set_ignore_cursor_events(ignores_mouse);
 
     let hud_for_main = hud.clone();
     let _ = app.run_on_main_thread(move || {
+        if let Some((x, y)) = hud_origin_for_active_monitor(focus_point, 430.0, 200.0, 96.0) {
+            let _ = hud_for_main.set_position(LogicalPosition::new(x, y));
+        } else if let Ok(Some(monitor)) = hud_for_main.primary_monitor() {
+            let m_size = monitor.size();
+            let m_pos = monitor.position();
+            let scale = monitor.scale_factor();
+            let win_w = (430.0 * scale) as i32;
+            let win_h = (200.0 * scale) as i32;
+            let x = m_pos.x + (m_size.width as i32 - win_w) / 2;
+            let y = m_pos.y + (m_size.height as i32) - win_h - (96.0 * scale) as i32;
+            let _ = hud_for_main.set_position(PhysicalPosition::new(x, y));
+        }
+
         if let Ok(ns_win) = hud_for_main.ns_window() {
             unsafe { configure_floating_hud_window(ns_win, ignores_mouse) };
         }
